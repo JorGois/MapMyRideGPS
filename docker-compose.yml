@@ -1,0 +1,10 @@
+# Dev server for the web app (no local Node needed): docker compose up
+services:
+  app:
+    image: node:22-alpine
+    working_dir: /w
+    volumes:
+      - ./app:/w
+    command: sh -c "npm install --silent && npx vite --host 0.0.0.0 --port 5173"
+    ports:
+      - "127.0.0.1:5173:5173"
