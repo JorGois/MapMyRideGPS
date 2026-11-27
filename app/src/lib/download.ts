@@ -17,10 +17,12 @@ export function setProxy(url: string) {
   else localStorage.removeItem(PROXY_KEY)
 }
 
-export function proxiedUrl(url: string, proxy = getProxy()): string | undefined {
+export function proxiedUrl(url: string, mapVersionId: string, proxy = getProxy()): string | undefined {
   const u = new URL(url)
-  if (u.host !== OSS_HOST) return undefined
-  return `${proxy.replace(/\/$/, '')}${u.pathname}`
+  if (u.protocol !== 'https:' || u.username || u.password || u.port || u.hash) return undefined
+  const base = `${proxy.replace(/\/$/, '')}${u.pathname}`
+  if (proxy.replace(/\/$/, '') === '/oss') return u.host === OSS_HOST ? base : undefined
+  return `${base}?${new URLSearchParams({ url: u.href, mapVersionId })}`
 }
 
 /** Checks that the proxy answers with a real ZIP (tiny Ceuta package, 61 KB, range-limited). */
@@ -33,8 +35,8 @@ export async function probeProxy(proxy = getProxy()): Promise<boolean> {
   } catch { return false }
 }
 
-export function canAutoDownload(url: string): boolean {
-  return !!proxiedUrl(url) && !!navigator.storage?.getDirectory
+export function canAutoDownload(url: string, mapVersionId: string): boolean {
+  return !!proxiedUrl(url, mapVersionId) && !!navigator.storage?.getDirectory
 }
 
 export interface Downloaded {
@@ -45,10 +47,11 @@ export interface Downloaded {
 
 export async function downloadPackage(
   url: string,
+  mapVersionId: string,
   onProgress: (done: number, total: number) => void,
   signal?: AbortSignal,
 ): Promise<Downloaded> {
-  const proxied = proxiedUrl(url)
+  const proxied = proxiedUrl(url, mapVersionId)
   if (!proxied) throw new Error('This download host is not supported by the proxy.')
   const res = await fetch(proxied, { signal })
   if (!res.ok || !res.body) throw new Error(`Download failed: HTTP ${res.status}`)

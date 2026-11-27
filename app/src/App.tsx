@@ -211,7 +211,7 @@ export default function App() {
   const downloadAndPlan = (entry: CatalogEntry) => device && run(async () => {
     await discardPending()
     addLog(t('logDownloading', { name: entry.name, size: fmtBytes(entry.size) }))
-    const dl = await downloadPackage(entry.url, (done, total) => onProgress(t('progressDownloading', { name: entry.name }), done, total))
+    const dl = await downloadPackage(entry.url, entry.mapVersionId, (done, total) => onProgress(t('progressDownloading', { name: entry.name }), done, total))
     setDownload({ ...dl, entry })
     addLog(t('logDownloaded', { file: dl.file.name }))
     setPlan(await planInstall(device, [dl.file]))
@@ -320,7 +320,7 @@ export default function App() {
         <td>{fmtBytes(c.size)}</td>
         <td><span className={pillClass(status)}>{t(STATUS_KEY[status])}</span></td>
         <td className="actions">
-          {device && proxyOk && canAutoDownload(c.url) && <button className="small" disabled={busy} onClick={() => downloadAndPlan(c)}>{t(status === 'outdated' ? 'btnUpdate' : status === 'current' ? 'btnReinstall' : 'btnInstall')}</button>}
+          {device && proxyOk && canAutoDownload(c.url, c.mapVersionId) && <button className="small" disabled={busy} onClick={() => downloadAndPlan(c)}>{t(status === 'outdated' ? 'btnUpdate' : status === 'current' ? 'btnReinstall' : 'btnInstall')}</button>}
           <a className="btn small ghostlink" href={c.url} download onClick={() => setGuideFor(c)} title={t('zipManual')}>ZIP</a>
         </td>
       </tr>

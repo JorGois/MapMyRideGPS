@@ -76,6 +76,7 @@ export interface CatalogEntry {
   id: string
   source: string
   sourceLabel: string
+  mapVersionId: string
   name: string
   path: string[]
   /** Country code + product, from the ZIP name when available (e.g. PT00, PT0000, ES0100). */
@@ -117,6 +118,7 @@ export async function fetchCatalog(src: CatalogSource, language = 'en'): Promise
           id: `${src.id}:${n.id ?? url}`,
           source: src.id,
           sourceLabel: src.label,
+          mapVersionId: src.mapVersionId,
           name: n.name ?? code ?? '?',
           path: p,
           code,

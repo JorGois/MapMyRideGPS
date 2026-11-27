@@ -50,12 +50,14 @@ A web app for managing the maps on a cycling GPS unit and keeping them updated t
 
 ## How to run
 - Dev server, no local Node needed: `docker compose up -d`, then open http://localhost:5173 in **Chrome or Edge**.
-- Tests: `docker run --rm -v "$PWD/app":/w -w /w node:22-alpine npm test`
+- Tests: `docker run --rm -v "$PWD":/w -w /w/app node:22-alpine npm test`
 - Build: the same command with `npm run build` → `app/dist/`. It's a static site, so any static host works.
 
 ## Hosting on GitHub Pages
 - `.github/workflows/pages.yml` builds `app/` and deploys it on every push to `main`. In the repo settings, set Pages → Source to "GitHub Actions".
 - One-click download needs a proxy. Deploy `cloudflare/worker.js` (`npx wrangler deploy`, free tier). Then either set the repo variable `DOWNLOAD_PROXY` to the worker URL, or paste the URL into the app's "Download proxy" panel.
+- The Worker verifies each requested download URL against the iGPSPORT catalog, so a change of download host does not require updating the Worker. Catalog availability is required for downloads. CORS is not authentication; monitor Cloudflare usage.
+- The local `/oss` development proxy remains tied to the current storage host; use the Worker locally if the catalog moves to a different host.
 - Without a proxy, everything else works and maps are installed by downloading the ZIP manually.
 
 ## Code map (`app/src`)
