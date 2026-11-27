@@ -69,6 +69,18 @@ describe('catalog-validated worker', () => {
     expect(fetch).toHaveBeenLastCalledWith(changedTarget, expect.anything())
   })
 
+  it('accepts same-origin requests from the app it serves, and still refuses unknown origins', async () => {
+    vi.stubGlobal('fetch', mockCatalog([target]))
+    const same = await worker.fetch(new Request('https://proxy.example/Mapinfo/V1/ES0900.zip', {
+      headers: { 'Sec-Fetch-Site': 'same-origin', Range: 'bytes=0-3' },
+    }))
+    expect(same.status).toBe(206)
+    const other = await worker.fetch(new Request('https://proxy.example/Mapinfo/V1/ES0900.zip', {
+      headers: { Origin: 'https://evil.example', 'Sec-Fetch-Site': 'cross-site' },
+    }))
+    expect(other.status).toBe(403)
+  })
+
   it('reports catalog failures without fetching the requested URL', async () => {
     const fetch = vi.fn(async () => new Response('Unavailable', { status: 503 }))
     vi.stubGlobal('fetch', fetch)
