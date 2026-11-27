@@ -1,3 +1,6 @@
 name = "mapmyridegps-proxy"
 main = "worker.js"
 compatibility_date = "2026-11-01"
+
+# Required by `wrangler preview`, which Cloudflare Workers Builds runs for non-production branches (PRs). May stay empty.
+[previews]
