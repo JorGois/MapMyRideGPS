@@ -2,6 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { parseManifest, serializeManifest } from './manifest'
 import { parseName, versionRank, rankToIso } from './filenames'
 import { Digester } from './device'
+import { proxiedUrl } from './download'
+
+describe('download proxy URLs', () => {
+  it('passes the catalog URL and identifier to the hosted proxy', () => {
+    const target = 'https://new-storage.example/Mapinfo/V3/PT0000.zip?token=abc'
+    const result = new URL(proxiedUrl(target, 'catalog-id', 'https://proxy.example')!)
+    expect(result.pathname).toBe('/Mapinfo/V3/PT0000.zip')
+    expect(result.searchParams.get('url')).toBe(target)
+    expect(result.searchParams.get('mapVersionId')).toBe('catalog-id')
+  })
+
+  it('keeps the local proxy limited to its configured host', () => {
+    expect(proxiedUrl('https://qw20191008.oss-us-west-1.aliyuncs.com/Mapinfo/V1/ES0900.zip', 'id', '/oss'))
+      .toBe('/oss/Mapinfo/V1/ES0900.zip')
+    expect(proxiedUrl('https://new-storage.example/file.zip', 'id', '/oss')).toBeUndefined()
+    expect(proxiedUrl('http://new-storage.example/file.zip', 'id', 'https://proxy.example')).toBeUndefined()
+  })
+})
 
 describe('manifest', () => {
   it('round-trips the device format and recounts MAP_NUM', () => {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { t } from './i18n'
+import { t, tHtml } from './i18n'
 
 const fmtBytes = (n: number) => n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1e3)} KB`
 /** The BiNavi links at USB 1.1 Full Speed (12 Mb/s): ~0.8 MB/s in practice, reads and writes. */
@@ -31,7 +31,7 @@ export default function InstallConfirm({ mode, backupName, backupBytes, writeByt
         <section className={`step ${skip ? 'off' : ''}`}>
           <h3>1 · {t('icBackupStep')}</h3>
           {!skip && (backupName
-            ? <p dangerouslySetInnerHTML={{ __html: t('icBackupTo', { name: backupName, size: fmtBytes(backupBytes) }) }} />
+            ? <p dangerouslySetInnerHTML={{ __html: tHtml('icBackupTo', { name: backupName, size: fmtBytes(backupBytes) }) }} />
             : <p dangerouslySetInnerHTML={{ __html: t('icBackupNone') }} />)}
           {!skip && <p className="muted small" dangerouslySetInnerHTML={{ __html: t('fpBackup2') + ' ' + t('fpBackup3') }} />}
           <div className="actions">

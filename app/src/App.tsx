@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { connect, groupRegions, isOnDevice, openDevice, removeLeftovers, isSupported, KNOWN_CAPACITY, listFiles, scanUsage, type Device, type DeviceFile, type Region, type Usage } from './lib/device'
 import { rankToIso } from './lib/filenames'
-import { country, getLang, LANGS, setLang, t, type Key, type Lang } from './i18n'
+import { country, getLang, LANGS, setLang, t, tHtml, type Key, type Lang } from './i18n'
 import { detectModel, fetchCatalog, isCompatible, loadSources, saveSources, sourcesForModel, type CatalogEntry, type CatalogSource } from './lib/catalog'
 import { backup, checkHealth, install, planInstall, removeFiles, repairHealth, type HealthIssue, type InstallPlan } from './lib/ops'
 import { canAutoDownload, clearDownloads, downloadPackage, getProxy, probeProxy, setProxy, type Downloaded } from './lib/download'
@@ -211,7 +211,7 @@ export default function App() {
   const downloadAndPlan = (entry: CatalogEntry) => device && run(async () => {
     await discardPending()
     addLog(t('logDownloading', { name: entry.name, size: fmtBytes(entry.size) }))
-    const dl = await downloadPackage(entry.url, (done, total) => onProgress(t('progressDownloading', { name: entry.name }), done, total))
+    const dl = await downloadPackage(entry.url, entry.mapVersionId, (done, total) => onProgress(t('progressDownloading', { name: entry.name }), done, total))
     setDownload({ ...dl, entry })
     addLog(t('logDownloaded', { file: dl.file.name }))
     setPlan(await planInstall(device, [dl.file]))
@@ -320,7 +320,7 @@ export default function App() {
         <td>{fmtBytes(c.size)}</td>
         <td><span className={pillClass(status)}>{t(STATUS_KEY[status])}</span></td>
         <td className="actions">
-          {device && proxyOk && canAutoDownload(c.url) && <button className="small" disabled={busy} onClick={() => downloadAndPlan(c)}>{t(status === 'outdated' ? 'btnUpdate' : status === 'current' ? 'btnReinstall' : 'btnInstall')}</button>}
+          {device && proxyOk && canAutoDownload(c.url, c.mapVersionId) && <button className="small" disabled={busy} onClick={() => downloadAndPlan(c)}>{t(status === 'outdated' ? 'btnUpdate' : status === 'current' ? 'btnReinstall' : 'btnInstall')}</button>}
           <a className="btn small ghostlink" href={c.url} download onClick={() => setGuideFor(c)} title={t('zipManual')}>ZIP</a>
         </td>
       </tr>
@@ -533,7 +533,7 @@ export default function App() {
               {(folderPrompt.kind === 'device'
                 ? ['fpDevice1', 'fpDevice2', 'fpDevice3', 'fpDevice4']
                 : ['fpBackup1', 'fpBackup2', 'fpBackup3', 'fpBackup4'] as Key[]
-              ).map(k => <li key={k} dangerouslySetInnerHTML={{ __html: t(k as Key, { size: fmtBytes(folderPrompt.need ?? 0) }) }} />)}
+              ).map(k => <li key={k} dangerouslySetInnerHTML={{ __html: tHtml(k as Key, { size: fmtBytes(folderPrompt.need ?? 0) }) }} />)}
             </ol>
             {folderPrompt.kind === 'backup' && !!folderPrompt.need && <p className="muted small">{t('fpBackupNeed', { size: fmtBytes(folderPrompt.need) })}</p>}
             <div className="row">
