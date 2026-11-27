@@ -3,10 +3,10 @@ import { connect, groupRegions, isOnDevice, openDevice, removeLeftovers, isSuppo
 import { rankToIso } from './lib/filenames'
 import { country, getLang, LANGS, setLang, t, tHtml, type Key, type Lang } from './i18n'
 import { detectModel, fetchCatalog, isCompatible, loadSources, saveSources, sourcesForModel, type CatalogEntry, type CatalogSource } from './lib/catalog'
-import { backup, checkHealth, install, planInstall, removeFiles, repairHealth, type HealthIssue, type InstallPlan } from './lib/ops'
+import { backup, checkHealth, fileKey, install, planInstall, removeFiles, repairHealth, type HealthIssue, type InstallPlan } from './lib/ops'
 import { canAutoDownload, clearDownloads, downloadPackage, getProxy, probeProxy, setProxy, type Downloaded } from './lib/download'
 import MapView, { type RegionStatus } from './MapView'
-import PlanView from './PlanView'
+import PlanView, { type FileState } from './PlanView'
 import InstallConfirm from './InstallConfirm'
 import RestoreTab from './RestoreTab'
 import { play, setSoundEnabled, soundEnabled } from './sound'
@@ -56,6 +56,11 @@ export default function App() {
   const [usage, setUsage] = useState<Usage>()
   const [download, setDownload] = useState<Downloaded & { entry: CatalogEntry }>()
   const [capacity, setCapacity] = useState<number>()
+  /** Per-file progress of the running install, shown as "Writing…" / "Done" in the plan. */
+  const [fileState, setFileState] = useState<Map<string, FileState>>(new Map())
+  const [phase, setPhase] = useState<'backup' | 'install'>()
+  const [sideOpen, setSideOpenState] = useState(() => loadBool('sideOpen', true))
+  const setSideOpen = (v: boolean) => { saveBool('sideOpen', v); setSideOpenState(v) }
 
   const addLog = useCallback((m: string) => setLog(l => [...l.slice(-300), `${new Date().toLocaleTimeString()}  ${m}`]), [])
   const lastProgressAt = useRef(Date.now())
@@ -131,7 +136,7 @@ export default function App() {
     try { await fn() } catch (e: any) {
       if (e?.name !== 'AbortError') { const m = String(e?.message ?? e); addLog(t('logError', { msg: m })); setError(m); play('error') }
     }
-    finally { setBusy(false); setProgress(undefined) }
+    finally { setBusy(false); setProgress(undefined); setPhase(undefined) }
   }
 
   const useDevice = async (d: Device) => {
@@ -181,8 +186,9 @@ export default function App() {
   }
 
   const pickBackup = () => run(async () => {
-    if (!await askFolder('backup')) return
-    const h = await window.showDirectoryPicker({ id: 'backup', mode: 'readwrite', startIn: 'documents' })
+    // The explanation is only needed the first time; with a folder already chosen, go straight to the picker.
+    if (!backupDir && !savedBackup && !await askFolder('backup')) return
+    const h = await window.showDirectoryPicker({ id: 'backup', mode: 'readwrite', startIn: backupDir ?? savedBackup ?? 'documents' })
     await checkBackupTarget(h)
     setBackupDir(h)
     setSavedBackup(undefined)
@@ -195,6 +201,7 @@ export default function App() {
   const discardPending = async () => {
     plan?.close()
     setPlan(undefined)
+    setFileState(new Map())
     if (download) { await download.discard(); setDownload(undefined) }
   }
 
@@ -242,12 +249,16 @@ export default function App() {
       if (!dir) throw new Error(t('icBackupNoneErr'))
       await checkBackupTarget(dir)
       play('start')
+      setPhase('backup')
       await backup(device, plan.replaced, dir, addLog, onProgress)
     }
     if (skipBackup) play('start')
-    await install(device, plan, addLog, onProgress)
+    setPhase('install')
+    setFileState(new Map())
+    await install(device, plan, addLog, onProgress, (inc, st) => setFileState(m => new Map(m).set(fileKey(inc), st)))
     play('done')
     setPlan(undefined)
+    setFileState(new Map())
     if (download) { await download.discard(); setDownload(undefined) }
     await refresh()
   })
@@ -276,6 +287,9 @@ export default function App() {
     await repairHealth(device, issues, addLog, onProgress)
     await refresh()
   })
+
+  /** Something in the sources needs the user: nothing enabled, or a catalog failed to load. */
+  const sourcesAlert = !sources.some(s => s.enabled) || Object.keys(catalogErr).length > 0
 
   const shownCatalog = catalog.filter(c => {
     const q = filter.trim().toLowerCase()
@@ -371,20 +385,37 @@ export default function App() {
       )}
 
       {busy && progress && stalledFor >= STALL_S && (
-        <div className="warn errorbar" role="alert">
-          <b>{t('stallTitle', { s: stalledFor })}</b>
-          <ul className="small">
-            <li>{t('stall1')}</li>
-            <li>{t('stall2')}</li>
-            <li>{t('stall3')}</li>
-          </ul>
+        <div className="alert stall" role="alert">
+          <div className="alert-head">
+            <span className="alert-icon" aria-hidden>⏳</span>
+            <div>
+              <b>{t('stallTitle', { s: stalledFor })}</b>
+              <div className="small">{t('stallSub')}</div>
+            </div>
+          </div>
+          <ol className="steps">
+            {(['1', '2', '3'] as const).map(n => (
+              <li key={n}>
+                <b>{t(`stall${n}h` as Key)}</b>
+                <span dangerouslySetInnerHTML={{ __html: t(`stall${n}` as Key) }} />
+              </li>
+            ))}
+          </ol>
         </div>
       )}
 
       {progress && (
         <div className="progress">
-          <span>{progress.label} {fmtBytes(progress.done)}{progress.total ? ` / ${fmtBytes(progress.total)}` : ''}</span>
+          <div className="row tight">
+            <span>
+              {phase && <b>{t(phase === 'backup' ? 'busyTitleBackup' : 'busyTitleInstall')} · </b>}
+              {progress.label} {fmtBytes(progress.done)}{progress.total ? ` / ${fmtBytes(progress.total)}` : ''}
+              {progress.total > 0 && <b> · {Math.floor((progress.done / progress.total) * 100)} %</b>}
+            </span>
+            <button className="ghost small" onClick={() => document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' })}>{t('busySeeActivity')}</button>
+          </div>
           {progress.total > 0 && <progress value={progress.done} max={progress.total} />}
+          {phase && <span className="small hot">⚠ {t('busyKeep')}</span>}
         </div>
       )}
 
@@ -393,7 +424,25 @@ export default function App() {
         <button role="tab" aria-selected={tab === 'restore'} className={tab === 'restore' ? 'tab on' : 'tab'} onClick={() => setTab('restore')}>{t('tabRestore')}</button>
       </nav>
 
-      {tab === 'maps' && <>
+      {tab === 'maps' && <div className={`layout ${sideOpen ? 'side-open' : 'side-closed'}`}>
+      <aside className="side" aria-label={t('sidebar')}>
+        {sideOpen ? <>
+          <div className="row tight">
+            <h2>{t('sidebar')}</h2>
+            <button className="ghost small" onClick={() => setSideOpen(false)} aria-label={t('sidebarHide')}>« {t('sidebarHide')}</button>
+          </div>
+          <SourcesPanel sources={sources} onChange={setSources} model={detected.model} how={detected.how} alert={sourcesAlert} />
+          <ProxyPanel ok={proxyOk} value={proxyInput} onInput={setProxyInput}
+            onSave={async () => { setProxy(proxyInput); setProxyInput(getProxy()); setProxyOk(undefined); setProxyOk(await probeProxy()) }} />
+        </> : (
+          <button className="ghost rail" onClick={() => setSideOpen(true)} title={t('sidebarShow')} aria-label={t('sidebarShow')}>
+            <span aria-hidden>⚙</span>
+            {(sourcesAlert || proxyOk === false) && <span className="badge" title={t('sidebarAlert')}>!</span>}
+            <span className="rail-label">{t('sidebar')}</span>
+          </button>
+        )}
+      </aside>
+      <div className="maincol">
       {device && (
         <section className="card">
           <div className="row">
@@ -449,7 +498,7 @@ export default function App() {
           </label>
           {plan && planMode === 'install' && (
             <>
-              <PlanView plan={plan} mode="install" />
+              <PlanView plan={plan} mode="install" state={fileState} />
               <div className="row">
                 <button className="ghost" onClick={() => run(discardPending)} disabled={busy}>{t('cancel')}</button>
                 <button onClick={doInstall} disabled={busy || !plan.incoming.length}>{t('installToGps')}</button>
@@ -464,9 +513,6 @@ export default function App() {
           <h2>{t('availableOnline')}</h2>
           <span className="muted">{t('sortedNewest')}</span>
         </div>
-        <SourcesPanel sources={sources} onChange={setSources} model={detected.model} how={detected.how} />
-        <ProxyPanel ok={proxyOk} value={proxyInput} onInput={setProxyInput}
-          onSave={async () => { setProxy(proxyInput); setProxyInput(getProxy()); setProxyOk(undefined); setProxyOk(await probeProxy()) }} />
         <div className="row filters">
           <input placeholder={t('filterPlaceholder')} value={filter} onChange={e => setFilter(e.target.value)} />
           <label><input type="checkbox" checked={onlyMine} onChange={e => { setOnlyMine(e.target.checked); localStorage.setItem('onlyMine', String(e.target.checked)) }} /> {t('onlyMine')}</label>
@@ -500,13 +546,14 @@ export default function App() {
           </tbody>
         </table>
       </section>
-      </>}
+      </div>
+      </div>}
 
       {tab === 'restore' && <>
         <RestoreTab connected={!!device} busy={busy} backupDir={backupDir ?? savedBackup} run={run} onPlan={files => planRestore(files)} />
         {plan && planMode === 'restore' && (
           <section className="card">
-            <PlanView plan={plan} mode="restore" />
+            <PlanView plan={plan} mode="restore" state={fileState} />
             <div className="row">
               <button className="ghost" onClick={() => run(discardPending)} disabled={busy}>{t('cancel')}</button>
               <button onClick={doInstall} disabled={busy || !plan.incoming.length}>{t('restoreToGps')}</button>
@@ -562,7 +609,7 @@ export default function App() {
 
       {log.length > 0 && (
         <section className="card">
-          <h2>{t('activity')}</h2>
+          <h2 id="activity">{t('activity')}</h2>
           <pre className="log">{log.join('\n')}</pre>
         </section>
       )}
@@ -646,8 +693,8 @@ function SourceCell({ r }: { r: Region }) {
   return <span title={tip}>{h.vendorFlag ? t('srcPreloaded') : 'Mapsforge'} <span className="muted">· OSM {h.mapDate}</span></span>
 }
 
-function SourcesPanel({ sources, onChange, model, how }: {
-  sources: CatalogSource[]; onChange: (s: CatalogSource[]) => void; model?: string; how: 'device' | 'maps' | 'unknown'
+function SourcesPanel({ sources, onChange, model, how, alert }: {
+  sources: CatalogSource[]; onChange: (s: CatalogSource[]) => void; model?: string; how: 'device' | 'maps' | 'unknown'; alert?: boolean
 }) {
   const [label, setLabel] = useState('')
   const [id, setId] = useState('')
@@ -657,8 +704,8 @@ function SourcesPanel({ sources, onChange, model, how }: {
   const hidden = sources.length - shown.length
   const v1 = sources.find(x => x.id === 'igpsport-v1')
   return (
-    <details className="sources" open={!model}>
-      <summary><b>{t('sources')}</b> <span className="muted small">{t('sourcesSelected', { n: sources.filter(s => s.enabled).length, total: sources.length })}</span>{' '}
+    <details className="sources" open={!model || alert}>
+      <summary>{alert && <span className="badge" title={t('sidebarAlert')}>!</span>} <b>{t('sources')}</b> <span className="muted small">{t('sourcesSelected', { n: sources.filter(s => s.enabled).length, total: sources.length })}</span>{' '}
         {model && <span className="pill ok">{t(how === 'maps' ? 'detectedFromMaps' : 'detectedDevice', { model })}</span>}
       </summary>
       {!model && <p className="muted small">{t('connectToFilter')}</p>}
@@ -698,7 +745,7 @@ function SourcesPanel({ sources, onChange, model, how }: {
 function ProxyPanel({ ok, value, onInput, onSave }: { ok?: boolean; value: string; onInput: (v: string) => void; onSave: () => void }) {
   return (
     <details className="sources" open={ok === false}>
-      <summary><b>{t('proxy')}</b>{' '}
+      <summary>{ok === false && <span className="badge" title={t('sidebarAlert')}>!</span>} <b>{t('proxy')}</b>{' '}
         <span className={`pill ${ok ? 'ok' : ok === false ? 'hot' : ''}`}>{ok ? t('proxyOk') : ok === false ? t('proxyDown') : t('checking')}</span>
       </summary>
       <p className="muted small">{t('proxyHelp')}</p>

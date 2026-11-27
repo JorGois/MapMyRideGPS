@@ -37,7 +37,7 @@ export async function permissionOf(h: FileSystemDirectoryHandle): Promise<Permis
   try { return await h.queryPermission({ mode: 'readwrite' }) } catch { return 'denied' }
 }
 
-export const SETTING_KEYS = ['sources:v1', 'downloadProxy', 'onlyMine', 'showMap', 'lang', 'sound'] as const
+export const SETTING_KEYS = ['sources:v1', 'downloadProxy', 'onlyMine', 'showMap', 'lang', 'sound', 'sideOpen'] as const
 const CAPACITY_PREFIX = 'capacity:'
 
 export function loadBool(key: (typeof SETTING_KEYS)[number], fallback: boolean): boolean {
