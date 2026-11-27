@@ -1,7 +1,7 @@
 # Dev server for the web app (no local Node needed): docker compose up
 services:
   app:
-    image: node:22-alpine
+    image: node:26-alpine
     working_dir: /w
     volumes:
       - ./app:/w
