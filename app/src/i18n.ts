@@ -484,6 +484,13 @@ export function t(key: Key, vars?: Record<string, string | number>): string {
   return s
 }
 
+const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+/** Like t(), for strings rendered as HTML: the translation may contain markup, the variables are escaped. */
+export function tHtml(key: Key, vars?: Record<string, string | number>): string {
+  const safe = vars && Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, String(v).replace(/[&<>"']/g, c => ESC[c])]))
+  return t(key, safe)
+}
+
 /** Country name in the current UI language (falls back to the code for non-ISO codes such as XC/GC). */
 export function country(code: string): string {
   try {
