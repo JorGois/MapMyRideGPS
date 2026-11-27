@@ -10,7 +10,9 @@ const OSS_HOST = 'qw20191008.oss-us-west-1.aliyuncs.com'
  */
 const PROXY_KEY = 'downloadProxy'
 export function getProxy(): string {
-  return localStorage.getItem(PROXY_KEY) || (import.meta.env.VITE_DOWNLOAD_PROXY as string | undefined) || '/oss'
+  const built = import.meta.env.VITE_DOWNLOAD_PROXY as string | undefined
+  // "self": the app is served by the proxy Worker itself (Cloudflare preview builds).
+  return localStorage.getItem(PROXY_KEY) || (built === 'self' ? location.origin : built) || '/oss'
 }
 export function setProxy(url: string) {
   if (url.trim()) localStorage.setItem(PROXY_KEY, url.trim().replace(/\/$/, ''))

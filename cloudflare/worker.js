@@ -1,4 +1,6 @@
 // Cloudflare Worker: CORS proxy for URLs in the official iGPSPORT catalog.
+// It also serves the built app (app/dist, see wrangler.toml): static files are answered by Workers
+// static assets before this code runs, so only non-asset paths (map ZIPs) reach fetch() below.
 // Deploy: `npx wrangler deploy` in this folder, then paste the worker URL into the app's
 // "Download proxy" setting (or build with VITE_DOWNLOAD_PROXY=<url>).
 const CATALOG_API = 'https://prod.en.igpsport.com/service/web/api/Map/MapInfoList'
@@ -43,8 +45,11 @@ export default {
       'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
       'Vary': 'Origin',
     }
+    // When the Worker also serves the app (preview builds), the app's own requests are same-origin and
+    // browsers send no Origin header on them. Sec-Fetch-Site marks those; like Origin, it can be spoofed by non-browsers.
+    const sameOrigin = req.headers.get('Sec-Fetch-Site') === 'same-origin'
     // Browsers send Origin on cross-origin fetches; other clients can spoof it.
-    if (!ALLOWED_ORIGINS.includes(origin)) return new Response('Forbidden', { status: 403 })
+    if (!sameOrigin && !ALLOWED_ORIGINS.includes(origin)) return new Response('Forbidden', { status: 403 })
     if (req.method === 'OPTIONS') return new Response(null, { headers: cors })
     if (req.method !== 'GET' && req.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: cors })
     const requestUrl = new URL(req.url)

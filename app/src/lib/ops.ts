@@ -37,6 +37,9 @@ async function peekHeader(stream: ReadableStream<Uint8Array>): Promise<Mapsforge
   return new TextDecoder().decode(b.subarray(0, 20)) === 'mapsforge binary OSM' ? (() => { try { return parseHeader(b) } catch { return undefined } })() : undefined
 }
 
+/** Stable id of a file on the GPS, e.g. "Maps/PT00000000.map". */
+export const fileKey = (f: { folder: Folder; name: string }) => `${f.folder}/${f.name}`
+
 export interface InstallPlan {
   incoming: Incoming[]
   /** Existing device files that will be overwritten or replaced by a newer file in the same slot. */
@@ -133,7 +136,9 @@ export async function backup(device: Device, files: DeviceFile[], backupRoot: Fi
   log(`Backup verified and saved to ${backupRoot.name}/${dir.name}`)
 }
 
-export async function install(device: Device, plan: InstallPlan, log: Log, progress: Progress) {
+/** `onFile` reports each file as it starts ('writing') and once it is written and listed in the manifests ('done'). */
+export async function install(device: Device, plan: InstallPlan, log: Log, progress: Progress,
+  onFile?: (inc: Incoming, state: 'writing' | 'done') => void) {
   const manifests: Record<Folder, Manifests> = {
     Maps: await readManifests(device.dirs.Maps),
     Router: await readManifests(device.dirs.Router),
@@ -148,6 +153,7 @@ export async function install(device: Device, plan: InstallPlan, log: Log, progr
     for (const inc of plan.incoming) {
       const dir = device.dirs[inc.folder]
       log(`Writing ${inc.folder}/${inc.name}`)
+      onFile?.(inc, 'writing')
       const digest = await writeStream(dir, inc.name, await inc.open(), b => progress('Install', base + b, total),
         () => progress(`Finishing ${inc.name}`, base + inc.size, total))
       base += inc.size
@@ -158,6 +164,7 @@ export async function install(device: Device, plan: InstallPlan, log: Log, progr
       }
       setEntry(manifests[inc.folder], inc.stem, digest)
       await writeManifests(dir, manifests[inc.folder])
+      onFile?.(inc, 'done')
     }
   } finally {
     await plan.close()

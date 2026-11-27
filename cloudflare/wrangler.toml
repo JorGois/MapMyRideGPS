@@ -1,3 +1,16 @@
 name = "mapmyridegps-proxy"
 main = "worker.js"
 compatibility_date = "2026-11-01"
+
+# The Worker also serves the app, so every PR gets a working preview URL from Workers Builds.
+# Files in app/dist are served first; any other path (map ZIPs) runs worker.js.
+# VITE_DOWNLOAD_PROXY=self makes the app use this same Worker as its download proxy.
+[build]
+command = "cd ../app && npm ci --ignore-scripts && VITE_DOWNLOAD_PROXY=self npm run build"
+watch_dir = "../app/src"
+
+[assets]
+directory = "../app/dist"
+
+# Required by `wrangler preview`, which Cloudflare Workers Builds runs for non-production branches (PRs). May stay empty.
+[previews]
